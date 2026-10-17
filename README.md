@@ -1,5 +1,7 @@
 # browser-flow-mcp
 
+[![npm](https://img.shields.io/npm/v/@tirthlabs/browser-flow-mcp?color=c2410c)](https://www.npmjs.com/package/@tirthlabs/browser-flow-mcp) [![CI](https://github.com/tirthkparikh/browser-flow-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/tirthkparikh/browser-flow-mcp/actions/workflows/ci.yml) [![license](https://img.shields.io/npm/l/@tirthlabs/browser-flow-mcp)](LICENSE) · [Live demo](https://tirthparikh.com/tools/browser-flow-mcp/)
+
 **Write a browser task once in YAML. Run it from your terminal or cron, or give it to AI agents as an MCP tool.**
 
 Logging in to a portal, downloading a report, checking a price, filling the same form every week: describe the steps once and they become:
