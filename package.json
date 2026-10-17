@@ -1,0 +1,63 @@
+{
+  "name": "@tirthlabs/browser-flow-mcp",
+  "version": "1.0.0",
+  "description": "Write browser automations in YAML and run them from the CLI, cron, or as MCP tools that AI agents (Claude, Cursor, VS Code) can call. Powered by Playwright.",
+  "type": "module",
+  "bin": {
+    "browser-flow-mcp": "bin/cli.js"
+  },
+  "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "bin",
+    "src",
+    "examples",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18.17"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  },
+  "dependencies": {
+    "yaml": "^2.5.1"
+  },
+  "peerDependencies": {
+    "playwright": ">=1.40.0"
+  },
+  "devDependencies": {
+    "playwright": "1.47.2"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "playwright",
+    "browser-automation",
+    "ai-agents",
+    "claude",
+    "cursor",
+    "yaml",
+    "web-scraping",
+    "rpa",
+    "workflow-automation",
+    "llm-tools"
+  ],
+  "author": "Tirth Parikh (https://tirthparikh.com)",
+  "homepage": "https://tirthparikh.com/tools/browser-flow-mcp/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tirthkparikh/browser-flow-mcp.git"
+  },
+  "bugs": {
+    "url": "https://github.com/tirthkparikh/browser-flow-mcp/issues"
+  },
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  }
+}

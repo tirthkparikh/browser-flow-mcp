@@ -1,0 +1,22 @@
+# Template: log in to a portal, download a report and remember the session.
+# Rename to .yml and set PORTAL_EMAIL / PORTAL_PASSWORD in the environment.
+name: export_orders
+description: Download yesterday's orders CSV from the supplier portal.
+session: supplier-portal        # cookies are saved, so later runs skip the login
+inputs:
+  date: { type: string, description: Date as YYYY-MM-DD }
+steps:
+  - goto: https://portal.example.com/orders
+  - if: { visible: "input[type=password]" }
+    then:
+      - fill:
+          "input[name=email]": ${PORTAL_EMAIL}
+          "input[type=password]": ${PORTAL_PASSWORD}
+      - click: button[type=submit]
+      - wait: { url: /orders }
+  - fill: { "#date": "{{date}}" }
+  - click: text=Apply
+  - download: { click: "text=Export CSV", saveAs: "downloads/orders-{{date}}.csv" }
+    as: file
+  - extract:
+      total: { selector: ".summary .total", number: true }

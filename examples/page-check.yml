@@ -1,0 +1,22 @@
+name: page_check
+description: Open any web page and report its title, meta description, headings, link count and a screenshot.
+readOnly: true
+inputs:
+  url: { type: string, description: Full URL, e.g. https://example.com }
+steps:
+  - goto: "{{url}}"
+  - extract:
+      title: { title: true }
+      final_url: { url: true }
+      headings: { selector: "h1, h2", all: true, limit: 20 }
+  - eval: document.querySelector('meta[name="description"]')?.content ?? null
+    as: description
+  - eval: document.querySelectorAll('a[href]').length
+    as: links
+  - screenshot: {}
+output:
+  title: "{{title}}"
+  url: "{{final_url}}"
+  description: "{{description}}"
+  headings: "{{headings}}"
+  links: "{{links}}"

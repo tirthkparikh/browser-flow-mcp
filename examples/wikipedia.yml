@@ -1,0 +1,18 @@
+name: wikipedia_summary
+description: Search Wikipedia and return the article title, URL and first paragraph.
+readOnly: true
+inputs:
+  query: { type: string, description: What to look up }
+steps:
+  - goto: https://en.wikipedia.org/w/index.php?search={{query}}&title=Special:Search&go=Go
+  - if: { exists: ".mw-search-results" }
+    then:
+      - click: ".mw-search-result-heading a"
+  - wait: "#mw-content-text"
+  - extract:
+      title: "#firstHeading"
+      url: { url: true }
+  - eval: |
+      const p = [...document.querySelectorAll('#mw-content-text p')].find(p => p.textContent.trim().length > 40);
+      return p ? p.textContent.replace(/\[\d+\]/g, '').trim() : null;
+    as: summary

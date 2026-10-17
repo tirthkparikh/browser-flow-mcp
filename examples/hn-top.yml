@@ -1,0 +1,21 @@
+name: hn_top_stories
+description: Get the current top stories from Hacker News with title, link, points and comment count.
+readOnly: true
+inputs:
+  limit: { type: integer, default: 10, description: How many stories to return (max 30) }
+steps:
+  - goto: https://news.ycombinator.com/
+  - wait: tr.athing
+  - eval: |
+      return [...document.querySelectorAll('tr.athing')].slice(0, {{limit}}).map(row => {
+        const meta = row.nextElementSibling;
+        const link = row.querySelector('.titleline > a');
+        const num = s => Number((s || '0').replace(/\D/g, '')) || 0;
+        return {
+          title: link?.textContent,
+          url: link?.href,
+          points: num(meta?.querySelector('.score')?.textContent),
+          comments: num([...(meta?.querySelectorAll('a') ?? [])].pop()?.textContent),
+        };
+      });
+    as: stories
