@@ -176,3 +176,11 @@ test('MCP server over stdio: initialize, list tools, call a tool, hot reload', a
     assert.equal((await c.request('tools/list', {})).result.tools.length, 2);
   } finally { await c.close(); }
 });
+
+test('onContext can block requests before the page opens', async () => {
+  const res = await runFlow({ name: 'blocked', timeout: 2000, steps: [{ goto: `${base}/orders` }] }, {
+    pool, onContext: ctx => ctx.route('**/orders', route => route.abort('blockedbyclient')),
+  });
+  assert.equal(res.ok, false);
+  assert.match(res.error, /ERR_BLOCKED_BY_CLIENT/);
+});

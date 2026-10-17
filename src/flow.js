@@ -207,7 +207,8 @@ const describe = step => {
 
 /**
  * Run a flow. Returns { ok, data, output, files, images, log, ms, error?, failedStep? }.
- * opts: inputs, headless, pool (from browserPool), baseDir (for relative paths), images (collect screenshots as base64).
+ * opts: inputs, headless, pool (from browserPool), baseDir (for relative paths), images (collect screenshots as base64),
+ * onLog(msg), onContext(context) to adjust the browser context before the first page opens.
  */
 export async function runFlow(flow, opts = {}) {
   const t0 = Date.now();
@@ -232,6 +233,7 @@ export async function runFlow(flow, opts = {}) {
       acceptDownloads: true, storageState, ignoreHTTPSErrors: !!flow.ignoreHTTPSErrors,
     });
     context.setDefaultTimeout(timeout);
+    await opts.onContext?.(context);  // e.g. block requests, add cookies, record a trace
     page = await context.newPage();
 
     const loc = (sel, step = {}) => {

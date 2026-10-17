@@ -130,6 +130,8 @@ const res = await runFlow(await loadFlow('flows/orders.yml'), { inputs: { date: 
 if (res.ok) console.log(res.output); else console.error(res.failedStep, res.error);
 ```
 
+Options for `runFlow`: `inputs`, `headless`, `pool` (share one browser between runs with `browserPool()`), `onLog(message)` for live step logs, `images: true` to collect every screenshot as base64, and `onContext(context)` to adjust the Playwright context first (block requests, add cookies, start a trace).
+
 ## License
 
 MIT © Tirth Parikh, [tirthparikh.com](https://tirthparikh.com)
