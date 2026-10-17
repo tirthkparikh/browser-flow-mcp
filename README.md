@@ -81,7 +81,9 @@ claude mcp add browser-flows -- npx -y @tirthlabs/browser-flow-mcp serve ./flows
 
 - Edit or add flows while the server runs. Clients are told the tool list changed.
 - One browser is shared between calls, and each call gets a clean context.
-- When a step fails, the agent gets the step, the error, the page URL and a screenshot, so it can explain what went wrong.
+- When a step fails, the agent gets the step, the error, the page URL and a screenshot, so it can explain what went wrong. `run` saves that screenshot as a PNG and puts its path in the result.
+- Cancelling a call from the client stops the flow before its next step.
+- Session files (`~/.browser-flow/sessions`) hold cookies, so they are created readable only by you.
 - `screenshot: {}` with no path returns the image to the agent.
 - `readOnly: true` marks a tool as read-only for clients that ask before running anything that changes data.
 
@@ -89,7 +91,7 @@ claude mcp add browser-flows -- npx -y @tirthlabs/browser-flow-mcp serve ./flows
 
 | Step | Example |
 | --- | --- |
-| `goto` | `goto: https://site.com/{{path}}` |
+| `goto` | `goto: https://site.com/{{path}}`. Fails on HTTP 4xx/5xx unless `{ url: …, allowHttpErrors: true }`. Sets `{{status}}` |
 | `click` / `dblclick` / `hover` | `click: "text=Sign in"` or `{ selector: ".item", nth: 2 }` |
 | `fill` | `fill: { "#email": "{{email}}", "#name": "Tirth" }` |
 | `type` | `type: { selector: "#search", text: "{{q}}", delay: 50 }` |
@@ -98,8 +100,8 @@ claude mcp add browser-flows -- npx -y @tirthlabs/browser-flow-mcp serve ./flows
 | `upload` | `upload: { selector: "input[type=file]", files: [invoice.pdf] }` |
 | `scroll` | `scroll: bottom` or a selector |
 | `wait` | `wait: 1000`, `wait: ".loaded"`, `wait: { url: /done }`, `wait: { text: Saved }` |
-| `extract` | text, `attr`, `html`, `value`, `number`, `all: true`, `fields: {…}`, `title`, `url` |
-| `eval` | `eval: document.title` with `as: title` |
+| `extract` | `extract: { price: { selector: .price, number: true }, links: { selector: a, attr: href, all: true }, title: { title: true }, url: { url: true } }`. Options: `attr`, `html`, `value`, `number`, `all`, `fields`, `title`, `url` |
+| `eval` | `eval: document.title` with `as: title`. `${…}` here is plain JavaScript, not an environment variable |
 | `screenshot` / `pdf` | `screenshot: { path: out/page.png, fullPage: true }` |
 | `download` | `download: { click: "#export", saveAs: out/file.csv }` |
 | `assert` | `assert: { visible: ".dashboard" }`, `{ url: /home }`, `{ textContains: Paid, selector: .status }` |
@@ -109,6 +111,8 @@ claude mcp add browser-flows -- npx -y @tirthlabs/browser-flow-mcp serve ./flows
 
 Any step can have `optional: true` (skip if it fails), `timeout: 5000` and `as: name`.
 
+`{{name}}` is an input or variable, and `${NAME}` is an environment variable (write `$${NAME}` for a literal `${NAME}`).
+
 Flow options: `browser` (chromium, firefox or webkit), `channel` (`chrome` to use the installed Chrome), `headless`, `viewport`, `userAgent`, `locale`, `timeout`, `session`, `vars`, `output` (shape the result with `{{vars}}`).
 
 ## Commands
@@ -116,9 +120,9 @@ Flow options: `browser` (chromium, firefox or webkit), `channel` (`chrome` to us
 ```
 browser-flow-mcp init [dir]               example flows
 browser-flow-mcp run <flow.yml> [k=v…]    --headed --out result.json --every 1h --webhook <url>
-browser-flow-mcp serve <dir>              MCP server over stdio
-browser-flow-mcp list <dir>               tools and their inputs
-browser-flow-mcp check <dir>              validate (good for CI)
+browser-flow-mcp serve <dir|file>         MCP server over stdio
+browser-flow-mcp list <dir|file>          tools and their inputs
+browser-flow-mcp check <dir|file>         validate (good for CI)
 browser-flow-mcp steps                    step reference
 ```
 

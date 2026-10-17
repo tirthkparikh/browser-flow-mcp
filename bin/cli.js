@@ -54,13 +54,20 @@ if (flags.help || !command) { console.log(HELP); process.exit(flags.help ? 0 : 1
 
 const parseEvery = s => {
   const m = String(s).match(/^(\d+)\s*(s|m|h|d)$/);
-  if (!m) fail(`--every expects e.g. 30s, 15m, 2h or 1d (got "${s}")`);
+  if (!m || Number(m[1]) === 0) fail(`--every expects e.g. 30s, 15m, 2h or 1d (got "${s}")`);
   return Number(m[1]) * { s: 1e3, m: 6e4, h: 36e5, d: 864e5 }[m[2]];
 };
 
 async function runOnce(flow, inputs) {
   const res = await runFlow(flow, { inputs, headless: !flags.headed, onLog: flags.quiet ? undefined : m => console.error(`  ${m}`) });
   const result = { flow: flow.name, ok: res.ok, at: new Date().toISOString(), ms: res.ms, ...(res.ok ? { output: res.output } : { error: res.error, failedStep: res.failedStep, url: res.url }), files: res.files };
+  const shot = !res.ok && res.images.find(i => i.label === 'page at failure');
+  if (shot) {
+    // save the failure screenshot next to the result so cron runs can be debugged later
+    const file = resolve(flags.out ? dirname(resolve(flags.out)) : '.', `${flow.name}-failure-${Date.now()}.png`);
+    await writeFile(file, Buffer.from(shot.data, 'base64'));
+    result.screenshot = file;
+  }
   console.log(JSON.stringify(result, null, 2));
   if (flags.out) { await mkdir(dirname(resolve(flags.out)), { recursive: true }); await writeFile(flags.out, JSON.stringify(result, null, 2) + '\n'); }
   if (flags.webhook) {

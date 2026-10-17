@@ -184,3 +184,40 @@ test('onContext can block requests before the page opens', async () => {
   assert.equal(res.ok, false);
   assert.match(res.error, /ERR_BLOCKED_BY_CLIENT/);
 });
+
+test('QA fixes: eval keeps ${}, $${X} escape, optional covers render errors, HTTP errors, inputs', async () => {
+  assert.equal(render('a $${HOME} b', {}), 'a ${HOME} b');
+  const res = await runFlow({ name: 'qa', steps: [
+    { goto: `${base}/orders` },
+    { eval: 'const x = 2; return `n=${x}`', as: 'n' },
+    { log: '${SURELY_NOT_SET_ENV_VAR}', optional: true },
+    { goto: { url: `${base}/missing`, allowHttpErrors: true } },
+    { set: { code: '{{status}}' } },
+  ] }, { pool });
+  assert.equal(res.ok, true, res.error);
+  assert.equal(res.data.n, 'n=2');
+  const bad = await runFlow({ name: 'qa404', steps: [{ goto: `${base}/missing` }] }, { pool });
+  assert.equal(bad.ok, false);
+  assert.match(bad.error, /HTTP 404/);
+  assert.doesNotMatch(bad.error, /\x1b\[/);
+  const int = { name: 'i', inputs: { n: { type: 'integer' }, s: { type: 'string', default: 'd' } }, steps: [{ goto: `${base}/orders` }] };
+  await assert.rejects(runFlow(int, { pool, inputs: { n: '1.5' } }), /whole number/);
+  const empty = await runFlow({ ...int, output: { s: '{{s}}' } }, { pool, inputs: { n: 1, s: '' } });
+  assert.equal(empty.output.s, '');
+});
+
+test('MCP server answers in-flight calls before exiting on stdin close', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'bf-eof-'));
+  await writeFile(join(dir, 'slow.yml'), `name: slow\nsteps:\n  - goto: ${base}/orders\n  - wait: 300\n`);
+  const child = spawn(process.execPath, [CLI, 'serve', dir], { stdio: ['pipe', 'pipe', 'ignore'] });
+  let out = '';
+  child.stdout.on('data', d => { out += d; });
+  child.stdin.end([
+    { jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 't', version: '1' } } },
+    { jsonrpc: '2.0', method: 'notifications/initialized' },
+    { jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'slow', arguments: {} } },
+  ].map(m => JSON.stringify(m)).join('\n') + '\n');
+  await new Promise(ok => child.on('exit', ok));
+  const replies = out.trim().split('\n').map(l => JSON.parse(l));
+  assert.ok(replies.some(r => r.id === 2 && r.result), 'tools/call reply missing');
+});

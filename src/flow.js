@@ -1,5 +1,6 @@
+/* global window, document */  // used inside page.evaluate(), which runs in the browser
 // Browser flows: small YAML files that describe a browser task step by step.
-import { readFile, readdir, mkdir, writeFile } from 'node:fs/promises';
+import { readFile, readdir, mkdir, writeFile, chmod } from 'node:fs/promises';
 import { join, extname, dirname, resolve as resolvePath, isAbsolute } from 'node:path';
 import { homedir } from 'node:os';
 import YAML from 'yaml';
@@ -40,9 +41,11 @@ function lookup(vars, path) {
 }
 
 /** "{{a.b}}" -> value, "x {{a}} y" -> string, "${ENV}" -> env var. Recurses into arrays/objects. */
-export function render(value, vars) {
+export function render(value, vars, { env: useEnv = true } = {}) {
   if (typeof value === 'string') {
-    const env = value.replace(/\$\{([A-Z0-9_]+)\}/g, (_, k) => {
+    // "$${X}" is an escape for a literal "${X}"
+    const env = !useEnv ? value : value.replace(/\$?\$\{([A-Z0-9_]+)\}/g, (m, k) => {
+      if (m.startsWith('$$')) return m.slice(1);
       if (process.env[k] == null) throw new Error(`Environment variable ${k} is not set`);
       return process.env[k];
     });
@@ -58,8 +61,8 @@ export function render(value, vars) {
       return isObj(v) || Array.isArray(v) ? JSON.stringify(v) : String(v);
     });
   }
-  if (Array.isArray(value)) return value.map(v => render(v, vars));
-  if (isObj(value)) return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, render(v, vars)]));
+  if (Array.isArray(value)) return value.map(v => render(v, vars, { env: useEnv }));
+  if (isObj(value)) return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, render(v, vars, { env: useEnv })]));
   return value;
 }
 
@@ -142,7 +145,7 @@ function coerceInputs(flow, given = {}) {
   const out = {};
   for (const [k, prop] of Object.entries(schema.properties)) {
     let v = given[k];
-    if (v === undefined || v === '') v = prop.default;
+    if (v === undefined || (v === '' && prop.type !== 'string')) v = prop.default;
     if (v === undefined) {
       if (schema.required?.includes(k)) throw new Error(`Missing input "${k}"${prop.description ? ` (${prop.description})` : ''}`);
       continue;
@@ -153,6 +156,7 @@ function coerceInputs(flow, given = {}) {
       else { try { v = JSON.parse(v); } catch { v = prop.type === 'array' ? v.split(',').map(s => s.trim()) : v; } }
     }
     if ((prop.type === 'number' || prop.type === 'integer') && !Number.isFinite(v)) throw new Error(`Input "${k}" must be a number`);
+    if (prop.type === 'integer' && !Number.isInteger(v)) throw new Error(`Input "${k}" must be a whole number`);
     if (prop.enum && !prop.enum.includes(v)) throw new Error(`Input "${k}" must be one of: ${prop.enum.join(', ')}`);
     out[k] = v;
   }
@@ -300,13 +304,20 @@ export async function runFlow(flow, opts = {}) {
         stepNo++;
         current = raw;
         const action = Object.keys(raw).find(k => k in STEPS);
-        // nested steps are rendered when they run, so {{index}} etc. resolve per iteration
-        const v = action === 'repeat' ? raw.repeat : render(raw[action], vars);
+        if (opts.signal?.aborted) throw new Error('Cancelled');
         const stepTimeout = raw.timeout ?? timeout;
         const t = Date.now();
         try {
+          // nested steps are rendered when they run, so {{index}} etc. resolve per iteration.
+          // eval code is JavaScript, where ${x} belongs to template literals, so env vars aren't expanded there.
+          const v = action === 'repeat' ? raw.repeat : render(raw[action], vars, { env: action !== 'eval' });
           switch (action) {
-            case 'goto': await page.goto(target(v, 'url'), { waitUntil: (isObj(v) && v.waitUntil) || 'domcontentloaded', timeout: stepTimeout }); break;
+            case 'goto': {
+              const res = await page.goto(target(v, 'url'), { waitUntil: (isObj(v) && v.waitUntil) || 'domcontentloaded', timeout: stepTimeout });
+              vars.status = res?.status() ?? null;
+              if (vars.status >= 400 && !(isObj(v) && v.allowHttpErrors)) throw new Error(`HTTP ${vars.status} from ${page.url()}`);
+              break;
+            }
             case 'click': await loc(target(v), isObj(v) ? v : {}).click({ timeout: stepTimeout, button: v.button }); break;
             case 'dblclick': await loc(target(v)).dblclick({ timeout: stepTimeout }); break;
             case 'fill':
@@ -386,20 +397,25 @@ export async function runFlow(flow, opts = {}) {
           }
           if (action !== 'log' && action !== 'if' && action !== 'repeat') say(`✓ ${describe(raw)} (${Date.now() - t}ms)`);
         } catch (e) {
-          if (raw.optional) { say(`- skipped ${describe(raw)}: ${e.message.split('\n')[0]}`); continue; }
+          if (raw.optional) { say(`- skipped ${describe(raw)}: ${e.message.replace(/\x1b\[[0-9;]*m/g, '').split('\n')[0]}`); continue; }
           throw e;
         }
       }
     };
 
     await runSteps(flow.steps);
-    if (sessionFile) { await mkdir(dirname(sessionFile), { recursive: true }); await context.storageState({ path: sessionFile }); }
+    if (sessionFile) {
+      // session files hold cookies and tokens: keep them private to this user
+      await mkdir(dirname(sessionFile), { recursive: true, mode: 0o700 });
+      await context.storageState({ path: sessionFile });
+      await chmod(sessionFile, 0o600).catch(() => {});
+    }
     const output = flow.output ? render(flow.output, vars) : data;
     return { ok: true, output, data, files, images, log, ms: Date.now() - t0 };
   } catch (e) {
     let shot;
     try { if (page) shot = (await page.screenshot({ timeout: 5000 })).toString('base64'); } catch {}
-    const msg = e.message.split('\n').filter(l => !/^\s*(at |=+|Call log)/.test(l)).slice(0, 4).join(' ').trim();
+    const msg = e.message.replace(/\x1b\[[0-9;]*m/g, '').split('\n').filter(l => !/^\s*(at |=+|Call log)/.test(l)).slice(0, 4).join(' ').trim();
     return {
       ok: false, error: msg, failedStep: current ? `#${stepNo} ${describe(current)}` : null, url: page?.url(),
       output: null, data, files, images: shot ? [...images, { data: shot, mimeType: 'image/png', label: 'page at failure' }] : images, log, ms: Date.now() - t0,

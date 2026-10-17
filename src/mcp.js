@@ -54,16 +54,18 @@ export function serveStdio({ name, version, instructions, listTools, callTool, i
     }
   }
 
+  const inflight = new Set();
   const rl = createInterface({ input, crlfDelay: Infinity });
   rl.on('line', line => {
     if (!line.trim()) return;
     let msg;
     try { msg = JSON.parse(line); } catch { return write({ jsonrpc: '2.0', id: null, error: { code: -32700, message: 'Parse error' } }); }
-    if (Array.isArray(msg)) msg.forEach(handle); else handle(msg);
+    for (const m of [].concat(msg)) { const p = handle(m); inflight.add(p); p.finally(() => inflight.delete(p)); }
   });
 
   return {
     notifyToolsChanged() { if (ready) write({ jsonrpc: '2.0', method: 'notifications/tools/list_changed' }); },
-    closed: new Promise(ok => rl.on('close', ok)),
+    // Resolves when the client closes stdin and every call already received has been answered.
+    closed: new Promise(ok => rl.on('close', ok)).then(async () => { while (inflight.size) await Promise.allSettled([...inflight]); }),
   };
 }
