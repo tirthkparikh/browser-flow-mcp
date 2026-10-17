@@ -1,6 +1,6 @@
 {
   "name": "@tirthlabs/browser-flow-mcp",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Write browser automations in YAML and run them from the CLI, cron, or as MCP tools that AI agents (Claude, Cursor, VS Code) can call. Powered by Playwright.",
   "type": "module",
   "bin": {
